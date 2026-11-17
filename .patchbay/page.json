@@ -1,0 +1,15 @@
+{
+  "name": "Tether",
+  "pitch": "One camera for every app: use your webcam or Android phone in Discord, OBS and Zoom, with a cover hotkey, zoom and filters.",
+  "category": "video",
+  "download": "match:TetherSetup-*.exe",
+  "web_app": "",
+  "signing": "",
+  "icon": "icon.png",
+  "thumbnail": "thumbnail.png",
+  "screenshots": [
+    "1-one-camera.png",
+    "2-setup.png",
+    "3-phone.png"
+  ]
+}
