@@ -1,0 +1,14 @@
+[package]
+name = "tether-vcam"
+description = "Tether Camera: the Windows 11 virtual camera media source"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "tether_vcam"
+crate-type = ["cdylib"]
+
+[dependencies]
+windows-core.workspace = true
+windows.workspace = true
