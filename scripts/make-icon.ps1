@@ -46,7 +46,10 @@ foreach ($sz in $sizes) {
     $ms = New-Object System.IO.MemoryStream
     $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
     $pngs[$sz] = $ms.ToArray()
-    if ($sz -eq 256) { $bmp.Save((Join-Path $assets 'icon-256.png'), [System.Drawing.Imaging.ImageFormat]::Png) }
+    if ($sz -eq 256) {
+        $bmp.Save((Join-Path $assets 'icon-256.png'), [System.Drawing.Imaging.ImageFormat]::Png)
+        $big = Draw-Icon 512; $big.Save((Join-Path $assets 'icon-512.png'), [System.Drawing.Imaging.ImageFormat]::Png); $big.Dispose()
+    }
     $bmp.Dispose()
 }
 
