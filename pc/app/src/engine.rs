@@ -602,6 +602,7 @@ impl Engine {
         let mut stats = (Instant::now(), 0u32, 0usize, Duration::ZERO);
         let mut waiting_for_keyframe = true;
         let mut last_frame = Instant::now();
+        let mut last_problem: Option<String> = None;
         while !self.restart {
             self.pump();
             self.tick_cover(!live);
@@ -624,14 +625,23 @@ impl Engine {
             match evt {
                 crate::browser::Event::Waiting { url } => {
                     live = false;
-                    self.set_phase(Phase::Searching("Scan the code with your phone's camera".into()));
+                    // Keep the last problem readable under the new code instead of hiding it.
+                    let msg = match &last_problem {
+                        Some(p) => format!("Scan the code with your phone's camera  ·  last try: {p}"),
+                        None => "Scan the code with your phone's camera".into(),
+                    };
+                    self.set_phase(Phase::Searching(msg));
                     self.shared.status(|s| s.pair_url = Some(url));
                 }
                 crate::browser::Event::Connected => {
+                    last_problem = None;
                     self.shared.status(|s| s.pair_url = None);
                 }
                 crate::browser::Event::Lost(reason) => {
                     live = false;
+                    if reason != "stopped" {
+                        last_problem = Some(reason.clone());
+                    }
                     self.set_phase(Phase::Searching(reason));
                 }
                 crate::browser::Event::Frame(au) => {

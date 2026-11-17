@@ -22,8 +22,10 @@ use rtc::rtcp::payload_feedbacks::picture_loss_indication::PictureLossIndication
 use rtc::rtp::codec::h264::H264Packet;
 use rtc::rtp_transceiver::rtp_sender::{RTCRtpCodec, RTCRtpCodecParameters, RtpCodecKind};
 use webrtc::media_stream::track_remote::{TrackRemote, TrackRemoteEvent};
+use rtc::ice::mdns::MulticastDnsMode;
 use webrtc::peer_connection::{
     PeerConnection, PeerConnectionBuilder, PeerConnectionEventHandler, RTCIceGatheringState, RTCPeerConnectionState,
+    SettingEngineBuilder,
 };
 use webrtc::runtime::{default_runtime, Runtime};
 
@@ -50,6 +52,7 @@ pub struct BrowserLink {
 
 impl BrowserLink {
     pub fn start() -> BrowserLink {
+        clean_logs();
         let (tx, rx) = mpsc::channel();
         let stop = Arc::new(AtomicBool::new(false));
         let keyframe = Arc::new(AtomicBool::new(false));
@@ -70,6 +73,50 @@ impl BrowserLink {
 impl Drop for BrowserLink {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
+    }
+}
+
+/// Only with TETHER_WIFI_LOG=1 in the environment: pairing steps (including local network addresses) for debugging.
+fn log_enabled() -> bool {
+    std::env::var("TETHER_WIFI_LOG").is_ok_and(|v| v == "1")
+}
+
+fn log_paths() -> Vec<std::path::PathBuf> {
+    let mut paths = Vec::new();
+    if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+        paths.push(std::path::PathBuf::from(local).join("Tether").join("wifi.log"));
+    }
+    if let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(|p| p.to_path_buf())) {
+        if !dir.to_string_lossy().to_lowercase().contains("program files") {
+            paths.push(dir.join("wifi.log"));
+        }
+    }
+    paths
+}
+
+/// Logging is off: remove logs an earlier debug run left behind.
+fn clean_logs() {
+    if !log_enabled() {
+        for p in log_paths() {
+            let _ = std::fs::remove_file(p);
+        }
+    }
+}
+
+/// Pairing steps go to %LOCALAPPDATA%\Tether\wifi.log (and next to tether.exe in a dev build), when enabled.
+pub fn log(msg: &str) {
+    use std::io::Write;
+    if !log_enabled() {
+        return;
+    }
+    let line = format!("{:?} {msg}\n", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0));
+    for p in log_paths() {
+        if let Some(d) = p.parent() {
+            let _ = std::fs::create_dir_all(d);
+        }
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&p) {
+            let _ = f.write_all(line.as_bytes());
+        }
     }
 }
 
@@ -96,7 +143,13 @@ fn agent() -> ureq::Agent {
 /// The phone's offer for this code, once it posted one.
 fn fetch_offer(code: &str) -> Option<String> {
     let url = format!("{WEB_BASE}/api/tether/pair?code={code}&want=offer");
-    let mut r = agent().get(&url).header("User-Agent", "Tether").call().ok()?;
+    let mut r = match agent().get(&url).header("User-Agent", "Tether").call() {
+        Ok(r) => r,
+        Err(e) => {
+            log(&format!("asking for the offer failed: {e}"));
+            return None;
+        }
+    };
     let v: serde_json::Value = serde_json::from_str(&r.body_mut().read_to_string().ok()?).ok()?;
     v["offer"].as_str().map(String::from)
 }
@@ -135,9 +188,11 @@ fn run(tx: Sender<Event>, stop: Arc<AtomicBool>, keyframe: Arc<AtomicBool>) {
             }
         }
         let Some(offer) = offer else { continue };
+        log(&format!("got the phone's offer ({} bytes)", offer.len()));
 
         // 2. Answer and stream until the phone goes away.
         let reason = rt.block_on(session(&code, offer, &tx, &stop, &keyframe));
+        log(&format!("session ended: {reason}"));
         if tx.send(Event::Lost(reason)).is_err() {
             return;
         }
@@ -208,6 +263,41 @@ impl PeerConnectionEventHandler for Handler {
     }
 }
 
+/// When the phone's local IPv4 addresses are all in other networks than this PC's (e.g. a guest Wi‑Fi), a message
+/// that says so plainly.
+fn other_network_hint(sdp: &str, ours: &str) -> Option<String> {
+    let net = |ip: &str| ip.rsplitn(2, '.').nth(1).map(String::from);
+    let ours_net = net(ours)?;
+    let phone: Vec<String> = sdp
+        .lines()
+        .filter_map(|l| l.strip_prefix("a=candidate:"))
+        .filter_map(|c| c.split_whitespace().nth(4))
+        .filter(|ip| ip.parse::<std::net::Ipv4Addr>().is_ok_and(|a| a.is_private()))
+        .map(String::from)
+        .collect();
+    if phone.is_empty() || phone.iter().any(|ip| net(ip).as_deref() == Some(ours_net.as_str())) {
+        return None;
+    }
+    Some(format!(
+        "Your phone ({}) is on a different network than this PC ({ours}), maybe a guest Wi‑Fi. Connect it to the same network as the PC.",
+        phone[0]
+    ))
+}
+
+/// "udp 192.168.1.5 host, udp abcd.local host, …" from an SDP's candidate lines (for the log).
+fn candidates(sdp: &str) -> String {
+    let list: Vec<String> = sdp
+        .lines()
+        .filter_map(|l| l.strip_prefix("a=candidate:"))
+        .map(|c| {
+            let f: Vec<&str> = c.split_whitespace().collect();
+            let typ = f.iter().position(|x| *x == "typ").and_then(|i| f.get(i + 1)).copied().unwrap_or("?");
+            format!("{} {} {}", f.get(2).unwrap_or(&"?"), f.get(4).unwrap_or(&"?"), typ)
+        })
+        .collect();
+    if list.is_empty() { "none".into() } else { list.join(", ") }
+}
+
 fn h264(payload_type: u8, profile: &str) -> RTCRtpCodecParameters {
     RTCRtpCodecParameters {
         rtp_codec: RTCRtpCodec {
@@ -224,6 +314,7 @@ fn h264(payload_type: u8, profile: &str) -> RTCRtpCodecParameters {
 
 async fn session(code: &str, offer: String, tx: &Sender<Event>, stop: &AtomicBool, keyframe: &Arc<AtomicBool>) -> String {
     let result: Result<String, String> = async {
+        log("building the peer connection");
         let runtime = default_runtime().ok_or("no WebRTC runtime")?;
         let mut media = MediaEngine::default();
         // The H.264 flavours phones send: constrained baseline, baseline, high.
@@ -233,6 +324,11 @@ async fn session(code: &str, offer: String, tx: &Sender<Event>, stop: &AtomicBoo
         let registry = register_default_interceptors(Registry::new(), &mut media).map_err(|e| e.to_string())?;
         // Same network: no STUN/TURN servers, nothing leaves the local network.
         let config = RTCConfigurationBuilder::new().with_ice_servers(vec![]).build();
+        // Browsers hide the phone's address behind a random "….local" name; resolve those on the local network.
+        let settings = SettingEngineBuilder::new()
+            .with_multicast_dns_mode(MulticastDnsMode::QueryOnly)
+            .with_multicast_dns_timeout(Some(Duration::from_secs(8)))
+            .build();
 
         let (gathered_tx, mut gathered_rx) = tokio::sync::mpsc::channel(1);
         let (state_tx, mut state_rx) = tokio::sync::mpsc::channel(8);
@@ -247,6 +343,7 @@ async fn session(code: &str, offer: String, tx: &Sender<Event>, stop: &AtomicBoo
             .with_configuration(config)
             .with_media_engine(media)
             .with_interceptor_registry(registry)
+            .with_setting_engine(settings)
             .with_handler(handler as Arc<dyn PeerConnectionEventHandler>)
             .with_runtime(runtime.clone())
             .with_udp_addrs(vec![format!("{}:0", local_ip())])
@@ -254,14 +351,19 @@ async fn session(code: &str, offer: String, tx: &Sender<Event>, stop: &AtomicBoo
             .await
             .map_err(|e| e.to_string())?;
 
+        log(&format!("peer connection ready on {}", local_ip()));
+        log(&format!("phone's addresses: {}", candidates(&offer)));
+        let other_network = other_network_hint(&offer, &local_ip());
         let offer = RTCSessionDescription::offer(offer).map_err(|e| format!("The phone's offer is broken ({e})"))?;
-        pc.set_remote_description(offer).await.map_err(|e| e.to_string())?;
-        let answer = pc.create_answer(None).await.map_err(|e| e.to_string())?;
-        pc.set_local_description(answer).await.map_err(|e| e.to_string())?;
+        pc.set_remote_description(offer).await.map_err(|e| format!("set_remote_description: {e}"))?;
+        let answer = pc.create_answer(None).await.map_err(|e| format!("create_answer: {e}"))?;
+        pc.set_local_description(answer).await.map_err(|e| format!("set_local_description: {e}"))?;
         let _ = tokio::time::timeout(Duration::from_secs(3), gathered_rx.recv()).await;
         let sdp = pc.local_description().await.ok_or("no answer")?.sdp;
+        log(&format!("answer ready ({} bytes), our addresses: {}", sdp.len(), candidates(&sdp)));
         let code2 = code.to_string();
         tokio::task::spawn_blocking(move || post_answer(&code2, &sdp)).await.map_err(|e| e.to_string())??;
+        log("answer sent, waiting for the connection");
 
         // Stream until the phone is gone (or we're told to stop).
         let started = Instant::now();
@@ -281,7 +383,9 @@ async fn session(code: &str, offer: String, tx: &Sender<Event>, stop: &AtomicBoo
                 _ => {}
             }
             if !connected && started.elapsed() > Duration::from_secs(25) {
-                break "The phone couldn't reach this PC. Are both on the same Wi‑Fi?".into();
+                break other_network
+                    .clone()
+                    .unwrap_or_else(|| "The phone couldn't reach this PC. Are both on the same Wi‑Fi?".into());
             }
         };
         let _ = pc.close().await;

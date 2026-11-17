@@ -972,6 +972,17 @@ impl App {
                 });
                 ui.add_space(16.0);
 
+                // ---- any phone over Wi‑Fi ----
+                card(ui, |ui| {
+                    card_header(ui, "+", "No cable? Any phone over Wi‑Fi", "iPhone too. Nothing to install, it runs in the phone's browser.");
+                    numbered(ui, 1, "Under Source (Camera tab), pick “Phone over Wi‑Fi (any phone)”. A QR code appears in the preview.");
+                    numbered(ui, 2, "Scan it with the phone's camera (or Google Lens) and open the link in Chrome or Safari.");
+                    numbered(ui, 3, "Tap Start camera and allow the camera. Keep the page open; the screen can be dimmed.");
+                    ui.add_space(4.0);
+                    hint(ui, "Phone and PC must be on the same network. A guest Wi‑Fi keeps them apart; Tether tells you when that's the case.");
+                });
+                ui.add_space(16.0);
+
                 // ---- 3 ----
                 card(ui, |ui| {
                     card_header(ui, "3", "Pick Tether Camera in your app", "Do it once; it stays picked.");

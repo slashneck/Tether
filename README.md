@@ -36,7 +36,11 @@ changing the look happens in Tether, and your apps never notice.
 2. **Pick a source** in Tether: any webcam on your PC, or your phone.
 3. **Pick "Tether Camera"** in your app. Done.
 
-**Using your phone?** Turn on USB debugging (Settings → About phone → tap *Build number* seven times, then Developer
+**Any phone over Wi‑Fi, iPhone included.** Pick *Phone over Wi‑Fi* as the source, scan the QR code Tether shows,
+and tap *Start camera* on the page that opens. Nothing to install on the phone: it runs in the browser. Phone and PC
+need to be on the same network.
+
+**Android phone over USB?** Turn on USB debugging (Settings → About phone → tap *Build number* seven times, then Developer
 options → *USB debugging*), plug it in and tap *Allow*. Then *Setup* → *Install on phone* in Tether puts the app on it,
 and keeps it updated. Prefer doing it yourself? Download `Tether-x.y.z.apk` from the release page on your phone.
 
@@ -59,6 +63,11 @@ driver to sign, and uninstalling leaves nothing behind.
 drops. The phone encodes on its own hardware, the PC decodes with Windows' built-in decoder, and a heartbeat reconnects
 by itself within seconds, so a wiggled cable is a short freeze, not a restart.
 
+**Any phone over Wi‑Fi.** No cable, no app: the Tether page in the phone's browser sends the camera straight to
+your PC over your own network (WebRTC, the same technology video calls use). It works on iPhone too. To connect, the
+two only swap a short "how to reach me" note through Patchbay, which forgets it right away; the video never leaves
+your network.
+
 **The phone stays out of the way.** Back or front camera, resolution, frame rate, quality and the flashlight are set from
 the PC. On the phone: a live preview you can switch off to save battery, and a screen that dims to minimum while
 streaming. Quitting Tether on the PC closes the app on the phone too.
@@ -69,13 +78,15 @@ SHA-256. The phone app comes with the PC app, and Tether offers to update the ph
 ## Requirements
 
 - Windows 11 (virtual cameras arrived with Windows 11)
-- A webcam, or an Android phone with Android 8 or newer and a USB cable that carries data
+- A webcam, any phone with a modern browser on the same network, or an Android phone (8 or newer) with a USB cable
+  that carries data
 
 ## Privacy
 
-Tether sends nothing anywhere. The video stays on your PC (and on the cable from your phone). The only
-network request Tether makes on its own is asking GitHub for the newest release, which you can switch off under
-*Setup → About*.
+Tether sends no video or pictures anywhere: they stay on your PC, the cable, or your own network. For a Wi‑Fi phone,
+the PC and the phone swap their local network addresses through Patchbay once (deleted as soon as it's read, at most
+after 10 minutes), and only while *Phone over Wi‑Fi* is the source. Apart from that, the only network request Tether
+makes on its own is asking GitHub for the newest release, which you can switch off under *Setup → About*.
 
 ## Building
 
