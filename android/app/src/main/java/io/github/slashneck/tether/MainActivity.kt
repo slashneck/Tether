@@ -64,6 +64,12 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
         if (hasCameraPermission()) StreamService.start(this) else askPermissions()
     }
 
+    /** Opened again while already open (e.g. by the PC after a replug): make sure the service runs. */
+    override fun onNewIntent(intent: android.content.Intent?) {
+        super.onNewIntent(intent)
+        if (hasCameraPermission() && !Bus.state.serviceOn) StreamService.start(this)
+    }
+
     override fun onStart() {
         super.onStart()
         Bus.listen(listener)
@@ -312,8 +318,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
         }
         root.addView(errorText, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
 
-        // Left-aligned on purpose: easy to reach with one thumb.
-        val middle = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL or Gravity.START }
+        val middle = LinearLayout(this).apply { gravity = Gravity.CENTER }
         button = Button(this).apply {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
             setTextColor(BLACK)
@@ -323,7 +328,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
             background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(WHITE) }
             setOnClickListener { onButton() }
         }
-        middle.addView(button, LinearLayout.LayoutParams(dp(150), dp(150)))
+        middle.addView(button, LinearLayout.LayoutParams(dp(170), dp(170)))
         root.addView(middle, LinearLayout.LayoutParams(-1, 0, 1f))
 
         root.addView(text(13f, GREY).apply {

@@ -197,6 +197,7 @@ struct Engine {
     preview_buf: Vec<u8>,
     last_preview: Instant,
     launched_for: Option<String>,
+    failed_connects: u32,
 }
 
 impl Engine {
@@ -227,6 +228,7 @@ impl Engine {
             preview_buf: Vec::new(),
             last_preview: Instant::now(),
             launched_for: None,
+            failed_connects: 0,
         };
         e.load_cover();
         e
@@ -607,7 +609,8 @@ impl Engine {
             ));
         }
         adb.forward(&device.serial, link::PORT).map_err(|e| (format!("USB forward failed: {e}"), Duration::from_secs(1)))?;
-        if self.launched_for.as_deref() != Some(&device.serial) {
+        // Open the app once per plug-in, and again if it keeps not answering (its service may have been stopped).
+        if self.launched_for.as_deref() != Some(&device.serial) || (self.failed_connects > 0 && self.failed_connects % 8 == 0) {
             adb.launch(&device.serial);
             self.launched_for = Some(device.serial.clone());
         }
@@ -618,8 +621,14 @@ impl Engine {
         });
         let addr: SocketAddr = ([127, 0, 0, 1], link::PORT).into();
         match self.session(addr, &device) {
-            Ok(()) => Err(("Connection lost, reconnecting…".into(), Duration::from_millis(300))),
-            Err(e) => Err((format!("Waiting for Tether on {} ({e})", device.model), Duration::from_millis(700))),
+            Ok(()) => {
+                self.failed_connects = 0;
+                Err(("Connection lost, reconnecting…".into(), Duration::from_millis(300)))
+            }
+            Err(e) => {
+                self.failed_connects += 1;
+                Err((format!("Waiting for Tether on {} ({e})", device.model), Duration::from_millis(700)))
+            }
         }
     }
 

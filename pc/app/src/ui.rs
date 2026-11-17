@@ -346,6 +346,17 @@ fn switch(ui: &mut Ui, on: &mut bool) -> egui::Response {
     resp
 }
 
+/// Draws a small line at the middle of a slider (where its default is). Returns true on double-click: reset it.
+fn center_mark(ui: &Ui, slider: &egui::Response) -> bool {
+    let r = slider.rect;
+    let x = r.center().x;
+    ui.painter().line_segment(
+        [pos2(x, r.center().y - 7.0), pos2(x, r.center().y + 7.0)],
+        Stroke::new(1.5, Color32::from_rgb(0x6A, 0x6A, 0x6A)),
+    );
+    slider.double_clicked()
+}
+
 fn toggle_row(ui: &mut Ui, label: &str, on: &mut bool) {
     ui.horizontal(|ui| {
         ui.label(RichText::new(label).color(SOFT));
@@ -359,7 +370,10 @@ fn slider_row(ui: &mut Ui, label: &str, value: &mut i32) {
     ui.horizontal(|ui| {
         ui.add_sized([86.0, 20.0], egui::Label::new(RichText::new(label).color(SOFT)));
         ui.spacing_mut().slider_width = ui.available_width() - 44.0;
-        ui.add(egui::Slider::new(value, -100..=100).show_value(false));
+        let r = ui.add(egui::Slider::new(value, -100..=100).show_value(false));
+        if center_mark(ui, &r) {
+            *value = 0;
+        }
         ui.label(RichText::new(format!("{value}")).size(12.0).color(MUTED));
     });
 }
@@ -425,10 +439,9 @@ impl App {
 
     fn camera_view(&mut self, ui: &mut Ui, settings: &mut Settings) {
         let status = self.shared.status.lock().unwrap().clone();
-        // 16:9, as large as fits above the buttons, centred in the space.
+        // 16:9, as large as fits, centred. The buttons float on its bottom edge.
         let avail = ui.available_size();
-        let buttons = 50.0;
-        let h = (avail.x * 9.0 / 16.0).min(avail.y - buttons).max(120.0);
+        let h = (avail.x * 9.0 / 16.0).min(avail.y).max(120.0);
         let w = h * 16.0 / 9.0;
         let (row, _) = ui.allocate_exact_size(vec2(avail.x, h), Sense::hover());
         let rect = egui::Rect::from_center_size(row.center(), vec2(w, h));
@@ -451,7 +464,7 @@ impl App {
                 Phase::NoCamera(m) | Phase::Searching(m) => m.clone(),
                 Phase::Live => String::new(),
             };
-            let galley_pos = pos2(rect.center().x, rect.bottom() - 40.0);
+            let galley_pos = pos2(rect.center().x, rect.bottom() - 84.0);
             painter.text(galley_pos, egui::Align2::CENTER_CENTER, msg, FontId::proportional(15.0), TEXT);
         }
 
@@ -475,12 +488,18 @@ impl App {
         painter.circle_filled(pill_rect.left_center() + vec2(12.0, 0.0), 3.5, if live && !status.covered { TEXT } else { MUTED });
         painter.galley(pill_rect.min + vec2(22.0, 6.0), galley, TEXT);
 
-        ui.add_space(14.0);
-        let inset = ((avail.x - w) / 2.0).max(0.0);
-        ui.horizontal(|ui| {
-            ui.add_space(inset);
-            ui.set_max_width(inset + w);
-            if ui.add(primary(if status.paused { "  Resume  " } else { "  Pause  " })).clicked() {
+        // Toolbar floating on the preview's bottom edge, on dark glass so it reads over any picture.
+        let bar = egui::Rect::from_min_max(pos2(rect.left() + 14.0, rect.bottom() - 52.0), pos2(rect.right() - 14.0, rect.bottom() - 14.0));
+        let glass = |text: &str, primary_look: bool| {
+            let (fill, color) = if primary_look { (TEXT, BLACK) } else { (Color32::from_rgba_unmultiplied(10, 10, 10, 215), TEXT) };
+            egui::Button::new(RichText::new(text.to_string()).color(color).family(FontFamily::Name("semibold".into())))
+                .fill(fill)
+                .stroke(Stroke::new(1.0, if primary_look { TEXT } else { Color32::from_rgb(0x3A, 0x3A, 0x3A) }))
+                .corner_radius(8)
+                .min_size(vec2(0.0, 36.0))
+        };
+        ui.scope_builder(egui::UiBuilder::new().max_rect(bar).layout(Layout::left_to_right(Align::Center)), |ui| {
+            if ui.add(glass(if status.paused { "  Resume  " } else { "  Pause  " }, true)).clicked() {
                 let _ = self.tx.send(Cmd::TogglePause);
             }
             let cover_label = match &settings.hotkey {
@@ -488,13 +507,13 @@ impl App {
                 _ if status.covered => "  Uncover  ".to_string(),
                 _ => "  Cover  ".to_string(),
             };
-            if ui.add(outline(&cover_label)).clicked() {
+            if ui.add(glass(&cover_label, false)).clicked() {
                 let _ = self.tx.send(Cmd::ToggleCover);
             }
-            if ui.add(outline(if settings.mirror { "  Mirrored  " } else { "  Mirror  " })).clicked() {
+            if ui.add(glass(if settings.mirror { "  Mirrored  " } else { "  Mirror  " }, false)).clicked() {
                 settings.mirror = !settings.mirror;
             }
-            if ui.add(outline("  Rotate  ")).clicked() {
+            if ui.add(glass("  Rotate  ", false)).clicked() {
                 settings.rotation = (settings.rotation + 90) % 360;
             }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -503,7 +522,11 @@ impl App {
                     if status.mbps > 0.0 {
                         stats += &format!(" · {:.1} Mbit/s · decode {:.1} ms", status.mbps, status.decode_ms);
                     }
-                    ui.label(RichText::new(stats).size(12.0).color(MUTED));
+                    egui::Frame::new()
+                        .fill(Color32::from_rgba_unmultiplied(10, 10, 10, 215))
+                        .corner_radius(99)
+                        .inner_margin(egui::Margin::symmetric(12, 6))
+                        .show(ui, |ui| ui.label(RichText::new(stats).size(12.0).color(SOFT)));
                 }
             });
         });
@@ -676,7 +699,10 @@ impl App {
                     ui.horizontal(|ui| {
                         ui.add_sized([70.0, 20.0], egui::Label::new(RichText::new(label).color(SOFT)));
                         ui.spacing_mut().slider_width = ui.available_width() - 4.0;
-                        ui.add(egui::Slider::new(v, -1.0..=1.0).show_value(false));
+                        let r = ui.add(egui::Slider::new(v, -1.0..=1.0).show_value(false));
+                        if center_mark(ui, &r) {
+                            *v = 0.0;
+                        }
                     });
                 }
             });
