@@ -464,6 +464,28 @@ impl App {
                 Phase::NoCamera(m) | Phase::Searching(m) => m.clone(),
                 Phase::Live => String::new(),
             };
+            // Waiting for a phone over Wi‑Fi: the pairing QR code, big and crisp, on its own white card.
+            if let Some(url) = status.pair_url.as_ref().filter(|_| settings.source == Source::Browser) {
+                if let Ok(qr) = qrcode::QrCode::new(url.as_bytes()) {
+                    let n = qr.width();
+                    let card = (h * 0.56).min(w * 0.4);
+                    let card_rect = egui::Rect::from_center_size(rect.center() - vec2(0.0, 26.0), vec2(card, card));
+                    painter.rect_filled(card_rect.expand(6.0), 14.0, BG);
+                    painter.rect_filled(card_rect, 10.0, Color32::WHITE);
+                    let quiet = 3.0;
+                    let cell = card / (n as f32 + quiet * 2.0);
+                    let origin = card_rect.min + vec2(cell * quiet, cell * quiet);
+                    let colors = qr.to_colors();
+                    for y in 0..n {
+                        for x in 0..n {
+                            if colors[y * n + x] == qrcode::Color::Dark {
+                                let r = egui::Rect::from_min_size(origin + vec2(x as f32 * cell, y as f32 * cell), vec2(cell + 0.5, cell + 0.5));
+                                painter.rect_filled(r, 0.0, BLACK);
+                            }
+                        }
+                    }
+                }
+            }
             let galley_pos = pos2(rect.center().x, rect.bottom() - 84.0);
             painter.text(galley_pos, egui::Align2::CENTER_CENTER, msg, FontId::proportional(15.0), TEXT);
         }
@@ -538,10 +560,12 @@ impl App {
         section_title(ui, "SOURCE");
         let current = match &s.source {
             Source::Phone => "Phone (USB)".to_string(),
+            Source::Browser => "Phone over Wi‑Fi (any phone)".to_string(),
             Source::Webcam { name, .. } => name.clone(),
         };
         let combo = egui::ComboBox::from_id_salt("source").selected_text(current).width(ui.available_width()).show_ui(ui, |ui| {
             ui.selectable_value(&mut s.source, Source::Phone, "Phone (USB)");
+            ui.selectable_value(&mut s.source, Source::Browser, "Phone over Wi‑Fi (any phone)");
             for cam in &status.webcams {
                 ui.selectable_value(
                     &mut s.source,
@@ -552,6 +576,16 @@ impl App {
         });
         if combo.response.clicked() {
             let _ = self.tx.send(Cmd::RefreshWebcams);
+        }
+
+        if s.source == Source::Browser {
+            ui.add_space(6.0);
+            hint(ui, "Works with any phone, iPhone included: scan the code in the preview with the phone's camera. Phone and PC must be on the same Wi‑Fi.");
+            hint(ui, "Camera, flip and light are on the phone's screen; it picks the best quality it can send.");
+            section(ui, "ORIENTATION");
+            segmented(ui, &mut s.rotation, &[(0, "0°"), (90, "90°"), (180, "180°"), (270, "270°")]);
+            toggle_row(ui, "Mirror", &mut s.mirror);
+            return;
         }
 
         let phone = s.source == Source::Phone;

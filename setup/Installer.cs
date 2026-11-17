@@ -83,13 +83,17 @@ internal static class Installer
         report?.Invoke(0, "Closing Tether");
         CloseTether();
 
-        report?.Invoke(0.03, "Releasing Tether Camera");
-        UnregisterCamera(Path.Combine(folder, CameraDll));
-        // A development copy from before the first release.
-        string dev = Path.Combine(folder, "dev");
-        if (Directory.Exists(dev)) UnregisterCamera(Path.Combine(dev, CameraDll));
-        RestartCameraService();
-        if (Directory.Exists(dev)) Retry(() => Directory.Delete(dev, true));
+        // Only an update has a Tether Camera to release; a fresh install leaves Windows' camera service alone.
+        string oldDll = Path.Combine(folder, CameraDll);
+        string dev = Path.Combine(folder, "dev"); // a development copy from before the first release
+        if (File.Exists(oldDll) || Directory.Exists(dev))
+        {
+            report?.Invoke(0.03, "Releasing Tether Camera");
+            UnregisterCamera(oldDll);
+            if (Directory.Exists(dev)) UnregisterCamera(Path.Combine(dev, CameraDll));
+            RestartCameraService();
+            if (Directory.Exists(dev)) Retry(() => Directory.Delete(dev, true));
+        }
 
         using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("payload.zip"))
         using (var zip = new ZipArchive(stream, ZipArchiveMode.Read))

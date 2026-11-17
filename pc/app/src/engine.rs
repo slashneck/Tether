@@ -72,6 +72,8 @@ pub struct Status {
     pub update: crate::updater::UpdateState,
     /// The Tether version on the connected phone (to offer updating it).
     pub phone_app: Option<String>,
+    /// "Phone (browser)": the link to show as a QR code while waiting for a phone.
+    pub pair_url: Option<String>,
 }
 
 pub struct Preview {
@@ -127,6 +129,7 @@ pub fn start() -> (Arc<Shared>, Sender<Cmd>) {
             cover_error: None,
             update: crate::updater::UpdateState::Idle,
             phone_app: None,
+            pair_url: None,
         }),
         settings: Mutex::new(settings.clone()),
         preview: Mutex::new(Preview { rgba: Vec::new(), width: 0, height: 0, serial: 0 }),
@@ -272,8 +275,10 @@ impl Engine {
         self.shared.status(|s| s.webcams = webcams);
         while !self.quit {
             self.restart = false;
+            self.shared.status(|s| s.pair_url = None);
             match self.settings.source.clone() {
                 Source::Phone => self.phone_loop(),
+                Source::Browser => self.browser_loop(),
                 Source::Webcam { link, name } => self.webcam_loop(&link, &name),
             }
         }
@@ -570,6 +575,113 @@ impl Engine {
                 stats = (Instant::now(), 0);
             }
         }
+    }
+
+    // ---------- phone through the browser (Wi‑Fi, any phone) ----------
+
+    fn browser_loop(&mut self) {
+        let link = crate::browser::BrowserLink::start();
+        let mut decoder = match Decoder::new() {
+            Ok(d) => d,
+            Err(e) => {
+                self.set_phase(Phase::Searching(format!("decoder: {e}")));
+                self.idle(Duration::from_secs(2), true);
+                return;
+            }
+        };
+        self.shared.status(|s| {
+            s.link = "Wi‑Fi";
+            s.device = "Phone (browser)".into();
+            s.cameras.clear();
+            s.battery = None;
+            s.phone_app = None;
+        });
+        self.set_phase(Phase::Searching("Starting…".into()));
+        let mut live = false;
+        let mut frame = Vec::new();
+        let mut stats = (Instant::now(), 0u32, 0usize, Duration::ZERO);
+        let mut waiting_for_keyframe = true;
+        let mut last_frame = Instant::now();
+        while !self.restart {
+            self.pump();
+            self.tick_cover(!live);
+            let evt = match link.events.recv_timeout(Duration::from_millis(15)) {
+                Ok(e) => e,
+                Err(RecvTimeoutError::Timeout) => {
+                    if live {
+                        if let Some(shm) = &self.shm {
+                            shm.keep_alive();
+                        }
+                        // A phone that stops sending (screen locked, page closed) shows the cover after 2 s.
+                        if last_frame.elapsed() > Duration::from_secs(2) {
+                            self.tick_cover(true);
+                        }
+                    }
+                    continue;
+                }
+                Err(RecvTimeoutError::Disconnected) => break,
+            };
+            match evt {
+                crate::browser::Event::Waiting { url } => {
+                    live = false;
+                    self.set_phase(Phase::Searching("Scan the code with your phone's camera".into()));
+                    self.shared.status(|s| s.pair_url = Some(url));
+                }
+                crate::browser::Event::Connected => {
+                    self.shared.status(|s| s.pair_url = None);
+                }
+                crate::browser::Event::Lost(reason) => {
+                    live = false;
+                    self.set_phase(Phase::Searching(reason));
+                }
+                crate::browser::Event::Frame(au) => {
+                    if !live {
+                        live = true;
+                        self.set_phase(Phase::Live);
+                        self.shared.status(|s| s.pair_url = None);
+                    }
+                    last_frame = Instant::now();
+                    let started = Instant::now();
+                    let mut got: Option<(u32, u32)> = None;
+                    let result = decoder.decode(&au, 0, &mut |nv12, w, h| {
+                        frame.clear();
+                        frame.extend_from_slice(nv12);
+                        got = Some((w, h));
+                    });
+                    if let Some((w, h)) = got {
+                        waiting_for_keyframe = false;
+                        self.emit(&frame, w as usize, h as usize);
+                        stats.1 += 1;
+                        self.shared.status(|s| s.actual = Some((w, h, s.actual.map_or(30, |a| a.2))));
+                    }
+                    if result.is_err() && !waiting_for_keyframe {
+                        link.request_keyframe();
+                        waiting_for_keyframe = true;
+                    }
+                    stats.2 += au.len();
+                    stats.3 += started.elapsed();
+                }
+            }
+            let since = stats.0.elapsed();
+            if since >= Duration::from_secs(1) {
+                let secs = since.as_secs_f32();
+                let (f, b, d) = (
+                    stats.1 as f32 / secs,
+                    stats.2 as f32 * 8.0 / secs / 1e6,
+                    if stats.1 > 0 { stats.3.as_secs_f32() * 1000.0 / stats.1 as f32 } else { 0.0 },
+                );
+                self.shared.status(|s| {
+                    s.fps = f;
+                    s.mbps = b;
+                    s.decode_ms = d;
+                    if let Some(a) = s.actual.as_mut() {
+                        a.2 = f.round() as u32;
+                    }
+                });
+                stats = (Instant::now(), 0, 0, Duration::ZERO);
+            }
+        }
+        self.shared.status(|s| s.pair_url = None);
     }
 
     // ---------- phone source ----------

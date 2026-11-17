@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub enum Source {
     Phone,
+    /// Any phone (iPhone too) through the Tether web page, over Wi‑Fi.
+    Browser,
     /// A webcam plugged into this PC, by its Windows device link (stable) and its name (for showing).
     Webcam { link: String, name: String },
 }
