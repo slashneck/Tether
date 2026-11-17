@@ -104,7 +104,9 @@ impl Shared {
 }
 
 pub fn start() -> (Arc<Shared>, Sender<Cmd>) {
-    let settings = Settings::load();
+    let saved = Settings::load_saved();
+    let first_run = saved.is_none();
+    let settings = saved.unwrap_or_default();
     let shared = Arc::new(Shared {
         status: Mutex::new(Status {
             phase: Phase::Searching("Starting…".into()),
@@ -168,7 +170,7 @@ pub fn start() -> (Arc<Shared>, Sender<Cmd>) {
     let (s3, tx4) = (shared.clone(), tx.clone());
     std::thread::Builder::new()
         .name("tether-engine".into())
-        .spawn(move || Engine::new(s3, rx, tx4, settings, hotkeys).run())
+        .spawn(move || Engine::new(s3, rx, tx4, settings, hotkeys).run(first_run))
         .expect("engine thread");
     (shared, tx)
 }
@@ -242,7 +244,7 @@ impl Engine {
         self.shared.status(|s| s.cover_error = err);
     }
 
-    fn run(mut self) {
+    fn run(mut self, first_run: bool) {
         unsafe {
             let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
             let _ = MFStartup(MF_VERSION, MFSTARTUP_FULL);
@@ -257,6 +259,14 @@ impl Engine {
             }
         };
         let webcams = webcam::list();
+        // First start: use the PC's webcam if it has one; the phone is one click away under Source.
+        if first_run {
+            let mut s = self.settings.clone();
+            if let Some(cam) = webcams.first() {
+                s.source = Source::Webcam { link: cam.link.clone(), name: cam.name.clone() };
+            }
+            self.apply_settings(s);
+        }
         self.shared.status(|s| s.webcams = webcams);
         while !self.quit {
             self.restart = false;

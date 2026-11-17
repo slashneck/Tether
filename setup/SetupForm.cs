@@ -65,7 +65,7 @@ internal sealed class SetupForm : Form
     {
         _page.Controls.Clear();
         _title.Text = "Tether";
-        _subtitle.Text = "Your Android phone as a webcam. Tether Camera shows up in Discord, OBS, Zoom and every other app.";
+        _subtitle.Text = "One camera for every app: your webcam or your phone, with a cover hotkey, zoom and filters.";
 
         bool installed = Installer.IsInstalled(_options.Folder);
         var desktop = new CheckOption { Text = "Add a desktop shortcut", Checked = _options.DesktopShortcut, Bounds = new Rectangle(0, 0, S(360), S(28)) };
@@ -130,8 +130,8 @@ internal sealed class SetupForm : Form
     {
         _page.Controls.Clear();
         _title.Text = "All set";
-        _subtitle.Text = "Tether waits in the tray next to the clock. Plug in your phone, then pick \"Tether Camera\" in your app.";
-        var hintText = SmallLabel("First time? Tether's Setup tab puts the app on your phone and shows how to turn on USB debugging.", 0, 0);
+        _subtitle.Text = "Tether waits in the tray next to the clock. Pick your webcam or phone in Tether, then \"Tether Camera\" in your app.";
+        var hintText = SmallLabel("Using your phone? Tether's Setup tab puts the app on it and shows how to turn on USB debugging.", 0, 0);
         hintText.ForeColor = Theme.Muted;
         var open = new FlatButton { Primary = true, Text = "Open Tether", Bounds = new Rectangle(S(220), S(178), S(140), S(40)) };
         var close = new FlatButton { Text = "Close", Bounds = new Rectangle(S(110), S(178), S(100), S(40)) };

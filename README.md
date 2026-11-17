@@ -22,43 +22,42 @@
 
 <br>
 
-Tether turns your Android phone into a webcam for your PC. Plug it in, and **Tether Camera** shows up in Discord, OBS,
-Zoom, Teams and your browser like any other camera. It's built to stay connected and stay out of the way: the phone
-encodes the video on its own hardware, the PC decodes it with Windows' built-in decoder, and nothing drops because a
-phone decided to save battery.
+Tether is a webcam tool for Windows. It adds one camera, **Tether Camera**, that Discord, OBS, Zoom, Teams and your
+browser see like any other, and puts everything you wish your webcam could do in front of it: a hotkey that covers you
+instantly, zoom and framing, filters, rotate and mirror. Feed it your normal webcam, or your Android phone over a
+USB cable with the free Tether phone app. Pick Tether Camera once in each app; switching sources, covering yourself or
+changing the look happens in Tether, and your apps never notice.
 
 ## Getting started
 
-1. **Install Tether on your PC.** Download `TetherSetup-x.y.z.exe` from the
+1. **Install Tether.** Download `TetherSetup-x.y.z.exe` from the
    [latest release](https://github.com/slashneck/Tether/releases/latest) and run it. Windows asks for admin rights once,
    because Tether Camera is added for the whole PC.
-2. **Turn on USB debugging on your phone.** Settings → About phone → tap *Build number* seven times, then Developer
-   options → *USB debugging*. Plug the phone in and tap *Allow*.
-3. **Put the app on your phone.** In Tether, open *Setup* → *Install on phone*. Prefer doing it yourself? Download
-   `Tether-x.y.z.apk` from the release page on your phone and open it.
-4. **Pick "Tether Camera"** in your app. That's it: from now on, plugging in is enough.
+2. **Pick a source** in Tether: any webcam on your PC, or your phone.
+3. **Pick "Tether Camera"** in your app. Done.
+
+**Using your phone?** Turn on USB debugging (Settings → About phone → tap *Build number* seven times, then Developer
+options → *USB debugging*), plug it in and tap *Allow*. Then *Setup* → *Install on phone* in Tether puts the app on it,
+and keeps it updated. Prefer doing it yourself? Download `Tether-x.y.z.apk` from the release page on your phone.
 
 ## Features
 
-**Built for the cable.** USB is the main way in: fast, private (nothing on your Wi‑Fi can connect), and immune to
-Wi‑Fi drops. A heartbeat notices a broken link within seconds and reconnects on its own, so a wiggled cable is a short
-freeze, not a restart.
-
-**Light on your PC.** The phone's hardware encoder does the heavy lifting, the PC decodes with Windows' own H.264
-decoder in low-latency mode, and the preview only runs while Tether's window is open.
-
-**No driver.** Tether Camera uses Windows 11's built-in virtual camera support. Nothing runs in the kernel, there's no
-driver to sign, and uninstalling leaves nothing behind.
+**One camera, any source.** Your webcam or your phone, switched in Tether while your apps keep seeing the same Tether
+Camera. No re-picking cameras in Discord mid-call.
 
 **Cover hotkey.** One global shortcut (Ctrl+Shift+H by default) swaps your camera for a picture or GIF of your choice,
-instantly, in every app at once. The same cover shows when the connection drops, instead of a frozen face.
-
-**Phone or webcam.** Use your phone, or any webcam plugged into the PC, as the source. Switch in Tether; your apps keep
-seeing the same Tether Camera.
+instantly, in every app at once. The same cover shows if the source drops, instead of a frozen face.
 
 **Zoom, framing and filters.** Zoom in and pan, fill/fit/stretch the frame, rotate and mirror, plus B&W, Noir, Warm,
 Cool, Vivid and Fade filters and brightness, contrast and saturation sliders. The preview shows exactly what your apps
 get.
+
+**No driver.** Tether Camera uses Windows 11's built-in virtual camera support. Nothing runs in the kernel, there's no
+driver to sign, and uninstalling leaves nothing behind.
+
+**Your phone as a webcam, done right.** Over USB: fast, private (nothing on your Wi‑Fi can connect) and immune to Wi‑Fi
+drops. The phone encodes on its own hardware, the PC decodes with Windows' built-in decoder, and a heartbeat reconnects
+by itself within seconds, so a wiggled cable is a short freeze, not a restart.
 
 **The phone stays out of the way.** Back or front camera, resolution, frame rate, quality and the flashlight are set from
 the PC. On the phone: a live preview you can switch off to save battery, and a screen that dims to minimum while
@@ -70,11 +69,11 @@ SHA-256. The phone app comes with the PC app, and Tether offers to update the ph
 ## Requirements
 
 - Windows 11 (virtual cameras arrived with Windows 11)
-- An Android phone with Android 8 or newer and a USB cable that carries data
+- A webcam, or an Android phone with Android 8 or newer and a USB cable that carries data
 
 ## Privacy
 
-Tether sends nothing anywhere. The video goes from your phone to your PC over the cable and nowhere else. The only
+Tether sends nothing anywhere. The video stays on your PC (and on the cable from your phone). The only
 network request Tether makes on its own is asking GitHub for the newest release, which you can switch off under
 *Setup → About*.
 

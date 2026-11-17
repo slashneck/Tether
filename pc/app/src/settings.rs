@@ -113,11 +113,9 @@ impl Settings {
         Some(PathBuf::from(std::env::var_os("APPDATA")?).join("Tether").join("settings.json"))
     }
 
-    pub fn load() -> Settings {
-        Self::path()
-            .and_then(|p| std::fs::read(p).ok())
-            .and_then(|b| serde_json::from_slice(&b).ok())
-            .unwrap_or_default()
+    /// The saved settings, or None on the very first start.
+    pub fn load_saved() -> Option<Settings> {
+        Self::path().and_then(|p| std::fs::read(p).ok()).and_then(|b| serde_json::from_slice(&b).ok())
     }
 
     pub fn save(&self) {
