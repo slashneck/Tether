@@ -1,9 +1,9 @@
 {
   "name": "Tether",
-  "pitch": "One camera for every app: use your webcam or Android phone in Discord, OBS and Zoom, with a cover hotkey, zoom and filters.",
+  "pitch": "One camera for every app: use your webcam or any phone (iPhone too) in Discord, OBS and Zoom, with a cover hotkey, zoom and filters.",
   "category": "video",
   "download": "match:TetherSetup-*.exe",
-  "web_app": "",
+  "web_app": "https://patchbay-sage.vercel.app/tether",
   "signing": "",
   "icon": "icon.png",
   "thumbnail": "thumbnail.png",
