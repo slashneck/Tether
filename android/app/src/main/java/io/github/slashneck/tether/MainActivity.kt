@@ -279,7 +279,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback {
         }
         root.addView(dimOverlay, FrameLayout.LayoutParams(-1, -1))
 
-        // Edge to edge: keep content clear of the status and navigation bars.
+        // Margins up front; on Android 15+ (edge to edge) the callback below adds the system bars to them.
+        home.setPadding(dp(24), dp(24), dp(24), dp(24))
         root.setOnApplyWindowInsetsListener { _, insets ->
             @Suppress("DEPRECATION")
             val top = insets.systemWindowInsetTop
