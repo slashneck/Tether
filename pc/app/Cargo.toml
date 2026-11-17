@@ -1,0 +1,26 @@
+[package]
+name = "tether"
+description = "Tether: use your Android phone as a webcam"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "tether"
+path = "src/main.rs"
+
+[dependencies]
+windows-core.workspace = true
+windows.workspace = true
+tether-shm = { path = "../shm" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+eframe = { version = "0.37", default-features = false, features = ["glow", "default_fonts"] }
+image = { version = "0.25", default-features = false, features = ["gif", "png", "jpeg", "webp"] }
+rfd = "0.15"
+tray-icon = "0.26"
+ureq = "3"
+sha2 = "0.11"
+
+[build-dependencies]
+embed-resource = "3"

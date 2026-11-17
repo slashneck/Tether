@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Tether mark: a lens with a cable. Same geometry as the 512-unit app icon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <path
+        android:fillColor="#0A0A0A"
+        android:pathData="M112,0h288a112,112 0,0 1,112 112v288a112,112 0,0 1,-112 112h-288a112,112 0,0 1,-112 -112v-288a112,112 0,0 1,112 -112z" />
+    <path
+        android:strokeColor="#FAFAFA"
+        android:strokeWidth="36"
+        android:pathData="M256,104a112,112 0,1 1,0 224a112,112 0,1 1,0 -224z" />
+    <path
+        android:fillColor="#FAFAFA"
+        android:pathData="M256,182a34,34 0,1 1,0 68a34,34 0,1 1,0 -68z" />
+    <path
+        android:strokeColor="#FAFAFA"
+        android:strokeWidth="36"
+        android:strokeLineCap="round"
+        android:pathData="M256,328V430" />
+</vector>

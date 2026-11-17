@@ -130,11 +130,24 @@ fn grab(path: &str) -> windows_core::Result<()> {
         println!("Read {frames} frames in {secs:.2}s ({:.1} fps)", frames as f64 / secs);
         let _ = source.Shutdown();
 
-        // Luma plane only: enough to see the picture.
+        // NV12 → RGB (BT.601, video range), full color.
+        let mut rgb = vec![0u8; w * h * 3];
+        let uv = &last[w * h..];
+        for y in 0..h {
+            for x in 0..w {
+                let c = last[y * w + x] as i32 - 16;
+                let i = (y / 2) * w + (x & !1);
+                let (d, e) = (uv[i] as i32 - 128, uv[i + 1] as i32 - 128);
+                let o = (y * w + x) * 3;
+                rgb[o] = ((298 * c + 409 * e + 128) >> 8).clamp(0, 255) as u8;
+                rgb[o + 1] = ((298 * c - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
+                rgb[o + 2] = ((298 * c + 516 * d + 128) >> 8).clamp(0, 255) as u8;
+            }
+        }
         let file = std::fs::File::create(path).expect("create png");
         let mut enc = png::Encoder::new(std::io::BufWriter::new(file), w as u32, h as u32);
-        enc.set_color(png::ColorType::Grayscale);
-        enc.write_header().unwrap().write_image_data(&last[..w * h]).unwrap();
+        enc.set_color(png::ColorType::Rgb);
+        enc.write_header().unwrap().write_image_data(&rgb).unwrap();
         println!("Saved {path}");
     }
     Ok(())

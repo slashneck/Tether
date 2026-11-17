@@ -12,6 +12,8 @@ use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
 use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED};
 use windows_core::{implement, IUnknown, Ref, GUID, HRESULT};
 
+use tether_shm::{scale_nv12, Shm};
+
 use crate::pattern::Pattern;
 use crate::source::KS_NOT_SUPPORTED;
 use crate::SendCom;
@@ -167,13 +169,17 @@ impl Stream {
     }
 }
 
-/// The worker: waits for a request, waits for the next frame time, delivers one frame.
+/// The worker: waits for a request, then for a fresh phone frame (or the next tick of the test card), delivers it.
 fn run(shared: Arc<Shared>, queue: SendCom<IMFMediaEventQueue>) {
     unsafe {
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
     }
     let mut pattern = Pattern::new();
     let mut next_due = Instant::now();
+    let mut shm: Option<Shm> = None;
+    let mut shm_tried: Option<Instant> = None;
+    let mut phone_frame = Vec::new();
+    let mut last_count = 0u64;
     loop {
         let (token, width, height, fps) = {
             let mut inner = shared.inner.lock().unwrap();
@@ -186,20 +192,49 @@ fn run(shared: Arc<Shared>, queue: SendCom<IMFMediaEventQueue>) {
             (inner.requests.pop_front().unwrap(), inner.width, inner.height, inner.fps)
         };
 
+        if shm.is_none() && shm_tried.map_or(true, |t| t.elapsed() > Duration::from_secs(1)) {
+            shm_tried = Some(Instant::now());
+            shm = Shm::create().ok();
+        }
+        if let Some(s) = &shm {
+            s.set_wanted_format(width, height, fps);
+            s.mark_reading();
+        }
+
         let period = Duration::from_nanos(1_000_000_000 / fps as u64);
-        let now = Instant::now();
-        if next_due > now {
-            std::thread::sleep(next_due - now);
-            next_due += period;
+        let live = shm.as_ref().filter(|s| s.writer_alive());
+        if let Some(s) = live {
+            // Hand over each phone frame as soon as it lands; if one is late, repeat the last one after 1.5 periods.
+            let deadline = Instant::now() + period * 3 / 2;
+            while s.frame_count() == last_count && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            next_due = Instant::now() + period;
         } else {
-            // We fell behind (or this is the first frame): restart the clock instead of bursting to catch up.
-            next_due = now + period;
+            let now = Instant::now();
+            if next_due > now {
+                std::thread::sleep(next_due - now);
+                next_due += period;
+            } else {
+                // We fell behind (or this is the first frame): restart the clock instead of bursting to catch up.
+                next_due = now + period;
+            }
         }
 
         if !shared.inner.lock().unwrap().running {
             continue;
         }
-        if let Err(e) = deliver(&queue.0, &mut pattern, token.map(|t| t.0), width, height, fps) {
+        let mut fill = |out: &mut [u8]| {
+            if let Some(s) = live {
+                if let Some((pw, ph, count)) = s.read_latest(&mut phone_frame) {
+                    last_count = count;
+                    scale_nv12(&phone_frame, pw as usize, ph as usize, out, width as usize, height as usize);
+                    return;
+                }
+            }
+            pattern.render(out, width as usize, height as usize);
+        };
+        if let Err(e) = deliver(&queue.0, &mut fill, token.map(|t| t.0), width, height, fps) {
             unsafe {
                 let _ = queue.0.QueueEventParamVar(MEError.0 as u32, &GUID::zeroed(), e.code(), std::ptr::null());
             }
@@ -210,7 +245,7 @@ fn run(shared: Arc<Shared>, queue: SendCom<IMFMediaEventQueue>) {
 
 fn deliver(
     queue: &IMFMediaEventQueue,
-    pattern: &mut Pattern,
+    fill: &mut dyn FnMut(&mut [u8]),
     token: Option<IUnknown>,
     width: u32,
     height: u32,
@@ -221,7 +256,7 @@ fn deliver(
         let buffer = MFCreateMemoryBuffer(size)?;
         let mut data = std::ptr::null_mut();
         buffer.Lock(&mut data, None, None)?;
-        pattern.render(std::slice::from_raw_parts_mut(data, size as usize), width as usize, height as usize);
+        fill(std::slice::from_raw_parts_mut(data, size as usize));
         buffer.Unlock()?;
         buffer.SetCurrentLength(size)?;
 

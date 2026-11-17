@@ -12,3 +12,4 @@ crate-type = ["cdylib"]
 [dependencies]
 windows-core.workspace = true
 windows.workspace = true
+tether-shm = { path = "../shm" }
