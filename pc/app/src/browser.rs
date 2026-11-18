@@ -30,7 +30,7 @@ use webrtc::peer_connection::{
 use webrtc::runtime::{default_runtime, Runtime};
 
 /// Where the Tether web page and the pairing API live.
-pub const WEB_BASE: &str = "https://patchbay-sage.vercel.app";
+pub const WEB_BASE: &str = "https://patchbayapps.com";
 /// A code is good for this long; then a fresh QR code is shown (the server forgets pairings after 10 minutes).
 const CODE_LIFETIME: Duration = Duration::from_secs(8 * 60);
 
