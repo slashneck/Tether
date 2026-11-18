@@ -12,8 +12,8 @@ android {
         applicationId = "io.github.slashneck.tether"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10100
-        versionName = "1.1.0"
+        versionCode = 10101
+        versionName = "1.1.1"
     }
 
     // The release key lives outside the repo: %USERPROFILE%\.tether-keys\keystore.properties (or the path in
