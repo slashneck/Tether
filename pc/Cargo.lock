@@ -4015,7 +4015,7 @@ dependencies = [
 
 [[package]]
 name = "tether"
-version = "1.1.1"
+version = "1.1.2"
 dependencies = [
  "async-trait",
  "eframe",
@@ -4039,7 +4039,7 @@ dependencies = [
 
 [[package]]
 name = "tether-shm"
-version = "1.1.1"
+version = "1.1.2"
 dependencies = [
  "windows",
  "windows-core",
@@ -4047,7 +4047,7 @@ dependencies = [
 
 [[package]]
 name = "tether-vcam"
-version = "1.1.1"
+version = "1.1.2"
 dependencies = [
  "tether-shm",
  "windows",
@@ -4056,7 +4056,7 @@ dependencies = [
 
 [[package]]
 name = "tether-vcam-dev"
-version = "1.1.1"
+version = "1.1.2"
 dependencies = [
  "png 0.17.16",
  "windows",

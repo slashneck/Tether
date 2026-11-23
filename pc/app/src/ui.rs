@@ -461,7 +461,7 @@ impl App {
         }
         if !live {
             let msg = match &status.phase {
-                Phase::NoCamera(m) | Phase::Searching(m) => m.clone(),
+                Phase::Searching(m) => m.clone(),
                 Phase::Live => String::new(),
             };
             // Waiting for a phone over Wi‑Fi: the pairing QR code, big and crisp, on its own white card.
@@ -848,7 +848,14 @@ impl App {
         let phone_old = status.phase == Phase::Live
             && status.link == "USB"
             && status.phone_app.as_deref().is_some_and(|v| is_newer(VERSION, v));
+        let camera_busy = status.camera_repair.as_ref().is_some_and(|c| c.0);
         let (text, button, cmd): (String, Option<&str>, Option<Cmd>) = match &status.update {
+            // Without Tether Camera nothing else matters, so this comes first.
+            _ if status.camera_repair.is_some() => (
+                status.camera_repair.clone().unwrap_or_default().1,
+                Some(if camera_busy { "Repairing…" } else { "Repair" }),
+                Some(Cmd::RepairCamera),
+            ),
             UpdateState::Available(rel) => (
                 format!("Tether {} is out. You have {VERSION}.", rel.version),
                 Some("Update now"),
@@ -872,12 +879,12 @@ impl App {
                     let (r, _) = ui.allocate_exact_size(vec2(8.0, 8.0), Sense::hover());
                     ui.painter().circle_filled(r.center(), 3.5, TEXT);
                     ui.label(RichText::new(text).color(TEXT));
-                    if let Some(msg) = status.install.as_ref().filter(|_| phone_old).map(|i| i.1.clone()) {
+                    if let Some(msg) = status.install.as_ref().filter(|_| phone_old && status.camera_repair.is_none()).map(|i| i.1.clone()) {
                         ui.label(RichText::new(msg).size(12.5).color(MUTED));
                     }
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         if let (Some(label), Some(cmd)) = (button, cmd) {
-                            let busy = status.install.as_ref().is_some_and(|i| i.0);
+                            let busy = camera_busy || status.install.as_ref().is_some_and(|i| i.0);
                             if ui.add_enabled(!busy, primary(&format!("  {label}  "))).clicked() {
                                 let _ = self.tx.send(cmd);
                             }

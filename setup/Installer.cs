@@ -81,7 +81,7 @@ internal static class Installer
         string folder = options.Folder;
 
         report?.Invoke(0, "Closing Tether");
-        CloseTether();
+        CloseTether(folder);
 
         // Only an update has a Tether Camera to release; a fresh install leaves Windows' camera service alone.
         string oldDll = Path.Combine(folder, CameraDll);
@@ -143,7 +143,7 @@ internal static class Installer
     {
         string folder = DefaultFolder;
         report?.Invoke(0, "Closing Tether");
-        CloseTether();
+        CloseTether(folder);
         report?.Invoke(0.15, "Removing Tether Camera from Windows");
         UnregisterCamera(Path.Combine(folder, CameraDll));
         RestartCameraService();
@@ -180,9 +180,19 @@ internal static class Installer
 
     // ---------- helpers ----------
 
-    private static void CloseTether()
+    private static void CloseTether(string folder)
     {
-        foreach (var proc in TetherProcesses())
+        // Tether's bundled adb leaves a background server running after Tether quits; it locks adb.exe.
+        string ours = Path.GetFullPath(Path.Combine(folder, "adb")) + Path.DirectorySeparatorChar;
+        var adbs = new List<Process>();
+        foreach (var proc in Process.GetProcessesByName("adb"))
+        {
+            string path = null;
+            try { path = proc.MainModule?.FileName; } catch { }
+            if (path != null && path.StartsWith(ours, StringComparison.OrdinalIgnoreCase)) adbs.Add(proc);
+            else proc.Dispose();
+        }
+        foreach (var proc in TetherProcesses().Concat(adbs))
         {
             using (proc)
             {

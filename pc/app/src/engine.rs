@@ -33,12 +33,14 @@ pub enum Cmd {
     CheckUpdate { quiet: bool },
     /// Download the found update, verify it, run its setup, then quit so it can replace us.
     InstallUpdate,
+    /// Register Tether Camera with Windows again (one admin prompt).
+    RepairCamera,
+    /// The repair finished (sent by its background thread).
+    CameraRepaired(Result<(), String>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Phase {
-    /// Tether Camera couldn't be turned on (not installed?).
-    NoCamera(String),
     Searching(String),
     Live,
 }
@@ -74,6 +76,8 @@ pub struct Status {
     pub phone_app: Option<String>,
     /// "Phone (browser)": the link to show as a QR code while waiting for a phone.
     pub pair_url: Option<String>,
+    /// Set when Windows can't load Tether Camera: (repair running, message).
+    pub camera_repair: Option<(bool, String)>,
 }
 
 pub struct Preview {
@@ -130,6 +134,7 @@ pub fn start() -> (Arc<Shared>, Sender<Cmd>) {
             update: crate::updater::UpdateState::Idle,
             phone_app: None,
             pair_url: None,
+            camera_repair: None,
         }),
         settings: Mutex::new(settings.clone()),
         preview: Mutex::new(Preview { rgba: Vec::new(), width: 0, height: 0, serial: 0 }),
@@ -201,6 +206,8 @@ struct Engine {
     last_preview: Instant,
     launched_for: Option<String>,
     failed_connects: u32,
+    camera: Option<vcam::VirtualCamera>,
+    camera_checked: Instant,
 }
 
 impl Engine {
@@ -232,6 +239,8 @@ impl Engine {
             last_preview: Instant::now(),
             launched_for: None,
             failed_connects: 0,
+            camera: None,
+            camera_checked: Instant::now(),
         };
         e.load_cover();
         e
@@ -254,15 +263,7 @@ impl Engine {
             let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
             let _ = MFStartup(MF_VERSION, MFSTARTUP_FULL);
         }
-        let camera = match vcam::VirtualCamera::start() {
-            Ok(c) => Some(c),
-            Err(e) => {
-                self.shared.status(|s| {
-                    s.phase = Phase::NoCamera(format!("Tether Camera isn't installed on this PC ({})", e.code()))
-                });
-                None
-            }
-        };
+        self.start_camera();
         let webcams = webcam::list();
         // First start: use the PC's webcam if it has one; the phone is one click away under Source.
         if first_run {
@@ -284,7 +285,7 @@ impl Engine {
         }
         // Quit: nothing of Tether stays on.
         self.settings.save();
-        drop(camera); // removes Tether Camera from Windows
+        self.camera = None; // removes Tether Camera from Windows
         if let Some(adb) = self.adb.take().or_else(Adb::find) {
             adb.remove_forward(link::PORT);
         }
@@ -319,6 +320,24 @@ impl Engine {
                 }
                 Cmd::CheckUpdate { quiet } => self.check_update(quiet),
                 Cmd::InstallUpdate => self.install_update(),
+                Cmd::RepairCamera => {
+                    self.shared.status(|s| s.camera_repair = Some((true, "Repairing Tether Camera…".into())));
+                    let tx = self.self_tx.clone();
+                    std::thread::spawn(move || {
+                        let _ = tx.send(Cmd::CameraRepaired(vcam::repair()));
+                    });
+                }
+                Cmd::CameraRepaired(Ok(())) => self.start_camera(),
+                Cmd::CameraRepaired(Err(msg)) => self.shared.status(|s| s.camera_repair = Some((false, msg))),
+            }
+        }
+        // The registration can vanish while Tether runs; a registry read now and then catches it.
+        if self.camera_checked.elapsed() > Duration::from_secs(30) {
+            self.camera_checked = Instant::now();
+            let flagged = self.shared.status.lock().unwrap().camera_repair.is_some();
+            if !flagged && vcam::needs_repair() {
+                self.camera = None;
+                self.flag_camera_repair();
             }
         }
         if self.shm.is_none() && self.shm_tried.elapsed() > Duration::from_secs(1) {
@@ -515,6 +534,28 @@ impl Engine {
             self.tick_cover(disconnected);
             std::thread::sleep(Duration::from_millis(15));
         }
+    }
+
+    /// (Re)creates Tether Camera, or asks for a repair if Windows lost its registration.
+    fn start_camera(&mut self) {
+        self.camera = None;
+        if vcam::needs_repair() {
+            self.flag_camera_repair();
+            return;
+        }
+        match vcam::VirtualCamera::start() {
+            Ok(c) => {
+                self.camera = Some(c);
+                self.shared.status(|s| s.camera_repair = None);
+            }
+            Err(e) => self.shared.status(|s| {
+                s.camera_repair = Some((false, format!("Windows couldn't turn on Tether Camera ({}).", e.code())))
+            }),
+        }
+    }
+
+    fn flag_camera_repair(&self) {
+        self.shared.status(|s| s.camera_repair = Some((false, "Windows lost Tether Camera, so apps can't see it.".into())));
     }
 
     fn set_phase(&self, phase: Phase) {
